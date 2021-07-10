@@ -1,9 +1,12 @@
 import os
 from flask_cors import CORS
 from flask import Flask, render_template, request, redirect
-from pydub import AudioSegment
-from pydub.utils import make_chunks
 
+from pydub.utils import make_chunks
+from pydub import AudioSegment
+from pydub.silence import split_on_silence
+import wave
+import contextlib
 
 def main_sql(file):
   import librosa
@@ -18,16 +21,16 @@ def main_sql(file):
 
       model = None
       _mapping = [
-          "issuer_fee_amount",
-          "acquirer_settlement_amount",
-          "cardholder_billing_amount",
-          "cashback_count",
-          "transaction_count",
-          "cashback_amount",
-          "surcharge_amount",
-          "transaction_amount",
-          "issuer_settlement_amount",
-          "merchant_transaction_amount"
+          "issuer fee amount",
+          "acquirer settlement amount",
+          "cardholder billing amount",
+          "cashback count",
+          "transaction count",
+          "cashback amount",
+          "surcharge amount",
+          "transaction amount",
+          "issuer settlement amount",
+          "merchant transaction amount"
       ]
       _instance = None
 
@@ -105,11 +108,11 @@ def bank(file):
 
       model = None
       _mapping = [
-          "qiwi_bank",
-          "far_eastern_bank",
-          "alfa_bank",
-          "west_siberian_commercial_bank",
-          "ross_bank"
+          "qiwi bank",
+          "far eastern bank",
+          "alfa bank",
+          "west siberian commercial bank",
+          "ross bank"
       ]
       _instance = None
 
@@ -345,7 +348,7 @@ def product(file):
       model = None
       _mapping = [
           "prepaid",
-          "deferred_debit",
+          "deferred debit",
           "debit",
           "credit",
           "charge"
@@ -513,64 +516,79 @@ def index():
             file_name="input"
             file.save(file_name)
             
-            myaudio = AudioSegment.from_file(file_name , "wav") 
-            chunk_length_ms = 3000 # pydub calculates in millisec
-            chunks = make_chunks(myaudio, chunk_length_ms) #Make chunks of 3 sec
+            sound_file = AudioSegment.from_file(file_name , "wav") 
+            audio_chunks = split_on_silence(sound_file, min_silence_len=250, silence_thresh=-40 )
 
-            #Export all of the individual chunks as wav files
+            for i, chunk in enumerate(audio_chunks):
+                out_file = "chunk{0}.wav".format(i)
+                print("exporting", out_file)
+                chunk.export(out_file, format="wav")
+                fname=out_file
+                with contextlib.closing(wave.open(fname,'r')) as f:
+                    frames = f.getnframes()
+                    rate = f.getframerate()
+                    duration = (frames / float(rate))*1000
+                audio_in_file= "chunk{0}.wav".format(i)
+                audio_out_file = "new_chunk{0}.wav".format(i)
+                # create 1 sec of silence audio segment
+                y=(3000.0000000-duration+1)/2
+                one_sec_segment = AudioSegment.silent(duration=y)  #duration in milliseconds
 
-            for i, chunk in enumerate(chunks):
-                chunk_name = "chunk{0}.wav".format(i)
-                print("exporting", chunk_name)
-                chunk.export(chunk_name, format="wav")
+                #read wav file to an audio segment
+                song = AudioSegment.from_wav(audio_in_file)
+
+                #Add above two audio segments    
+                final_song = one_sec_segment + song+ one_sec_segment
+
+                #Either save modified audio
+                final_song.export(audio_out_file, format="wav")
+                fname=audio_out_file
+                with contextlib.closing(wave.open(fname,'r')) as f:
+                    frames = f.getnframes()
+                    rate = f.getframerate()
+                    duration = frames / float(rate)
+                    print(duration)
                 
                 
-            x=[]
+
+
+
+            x=""
             speaker=[]
-            if(os.path.isfile("chunk0.wav")):
-                x.append(str(main_sql('chunk0.wav'))+" ")
-                speaker.append(str(voice('chunk0.wav')))
+            if(os.path.isfile("new_chunk0.wav")):
+                x+=(str(main_sql('new_chunk0.wav'))+" ")
+                speaker.append(str(voice('new_chunk0.wav')))
                 os.remove("chunk0.wav")
+                os.remove("new_chunk0.wav")
 
-            if(os.path.isfile("chunk1.wav")):
-                x.append(str(bank('chunk1.wav'))+" ")
+            if(os.path.isfile("new_chunk1.wav")):
+                x+=(str(bank('new_chunk1.wav'))+" ")
                 os.remove("chunk1.wav")
+                os.remove("new_chunk1.wav")
 
-            if(os.path.isfile("chunk2.wav")):
-                x.append(str(month('chunk2.wav'))+" ")
+            if(os.path.isfile("new_chunk2.wav")):
+                x+=(str(month('new_chunk2.wav'))+" ")
                 os.remove("chunk2.wav")
+                os.remove("new_chunk2.wav")
 
-            if(os.path.isfile("chunk3.wav")):
-                x.append(str(year('chunk3.wav'))+" ")
+            if(os.path.isfile("new_chunk3.wav")):
+                x+=(str(year('new_chunk3.wav'))+" ")
                 os.remove("chunk3.wav")
+                os.remove("new_chunk3.wav")
 
-            if(os.path.isfile("chunk4.wav")):
-                x.append(str(product('chunk4.wav'))+" ")
+            if(os.path.isfile("new_chunk4.wav")):
+                x+=(str(product('new_chunk4.wav'))+" ")
                 os.remove("chunk4.wav")
+                os.remove("new_chunk4.wav")
 
-            b=1
-            y=len(x)
-            i=0
-            while(b<=y):
-                a=x[i].split("_")
-                for k in a:
-                    #print("*")
-                    print(k)
-                    x.append(k)
-                    del x[i]
-                    b+=1
-
-            
             print(x)
+            
+
             dictionary={'input':x,'speaker':speaker}
             print(dictionary)
             return dictionary
             os.remove(file_name)
-            '''
-            result+=transcript(input)
-            print(result)
-            os.remove(input)
-            '''
+            
             
 
             
